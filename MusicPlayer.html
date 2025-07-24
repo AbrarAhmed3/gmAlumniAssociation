@@ -55,7 +55,18 @@
     let tracks = [];
     let currentIndex = 0;
 
-    // Element refs
+    // Read last played index from cookie
+    function getLastIndex() {
+      const m = document.cookie.match(/(?:^|; )lastIndex=(\d+)/);
+      return m ? parseInt(m[1], 10) : 0;
+    }
+
+    // Save index in cookie
+    function setLastIndex(i) {
+      document.cookie = `lastIndex=${i};path=/;max-age=${60*60*24*365}`;
+    }
+
+    // Elements
     const dirPicker = document.getElementById('dirPicker');
     const audio = document.getElementById('audio');
     const playBtn = document.getElementById('playBtn');
@@ -67,7 +78,10 @@
     const durationEl = document.getElementById('duration');
     const trackTitleEl = document.getElementById('track-title');
 
-    // Handle folder selection
+    // On page load, apply last index
+    currentIndex = getLastIndex();
+
+    // Folder Picker
     dirPicker.addEventListener('change', () => {
       const files = Array.from(dirPicker.files).filter(f => f.type.startsWith('audio/'));
       if (!files.length) return;
@@ -83,7 +97,8 @@
       });
 
       enableControls();
-      loadTrack(0);
+      // Load last played or first
+      loadTrack(currentIndex < tracks.length ? currentIndex : 0);
     });
 
     function enableControls() {
@@ -92,31 +107,19 @@
 
     function loadTrack(index) {
       currentIndex = index;
-      // Reset UI
+      setLastIndex(index);
       audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
+      audio.src = tracks[index].url;
+      audio.currentTime = 0;
+      trackTitleEl.textContent = tracks[index].title;
+      highlightActive();
       seekBar.value = 0;
       currentTimeEl.textContent = '00:00';
       durationEl.textContent = '00:00';
-      playBtn.innerHTML = '<i class="fa fa-play"></i>';
 
-      // Set new source and play when ready
-      audio.src = tracks[index].url;
-      trackTitleEl.textContent = tracks[index].title;
-      highlightActive();
-
-      const playOnLoad = () => {
-        audio.play().then(() => {
-          playBtn.innerHTML = '<i class="fa fa-pause"></i>';
-        }).catch(err => console.error('Playback error:', err));
-        audio.removeEventListener('loadedmetadata', playOnLoad);
-      };
-      audio.addEventListener('loadedmetadata', () => {
-        durationEl.textContent = formatTime(audio.duration);
-      });
-      audio.addEventListener('loadedmetadata', playOnLoad);
-      audio.load();
+      // Play immediately
+      audio.play().then(() => playBtn.innerHTML = '<i class="fa fa-pause"></i>')
+        .catch(err => console.error('Play error:', err));
     }
 
     function highlightActive() {
@@ -125,6 +128,7 @@
       });
     }
 
+    // Controls
     playBtn.addEventListener('click', () => {
       if (audio.paused) {
         audio.play().then(() => playBtn.innerHTML = '<i class="fa fa-pause"></i>');
@@ -133,10 +137,10 @@
         playBtn.innerHTML = '<i class="fa fa-play"></i>';
       }
     });
-
     prevBtn.addEventListener('click', () => loadTrack((currentIndex - 1 + tracks.length) % tracks.length));
     nextBtn.addEventListener('click', () => loadTrack((currentIndex + 1) % tracks.length));
 
+    // Time & Seek updates
     audio.addEventListener('timeupdate', () => {
       if (audio.duration) {
         const pct = (audio.currentTime / audio.duration) * 100;
@@ -144,11 +148,12 @@
         currentTimeEl.textContent = formatTime(audio.currentTime);
       }
     });
-
     seekBar.addEventListener('input', () => {
       if (audio.duration) audio.currentTime = (seekBar.value / 100) * audio.duration;
     });
-
+    audio.addEventListener('loadedmetadata', () => {
+      durationEl.textContent = formatTime(audio.duration);
+    });
     audio.addEventListener('ended', () => nextBtn.click());
 
     function formatTime(s) {
