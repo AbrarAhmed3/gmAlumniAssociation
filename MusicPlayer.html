@@ -1,0 +1,160 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Music Player</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gradient-to-br from-purple-600 to-indigo-600 min-h-screen flex items-center justify-center p-4">
+  <div class="bg-white bg-opacity-90 backdrop-blur-md rounded-xl shadow-lg w-full max-w-md p-6">
+    <h1 class="text-2xl font-bold text-gray-800 text-center mb-4">Music Player</h1>
+    <!-- Folder Selector -->
+    <div class="mb-6 text-center">
+      <label for="dirPicker" class="cursor-pointer inline-block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+        <i class="fa fa-folder-open me-2"></i>Select Music Folder
+      </label>
+      <input type="file" id="dirPicker" webkitdirectory directory multiple accept="audio/*" class="hidden">
+    </div>
+    <p id="track-title" class="text-center text-lg font-medium text-gray-700 mb-4">No folder selected</p><!-- Controls -->
+<div class="flex items-center justify-center space-x-8 mb-4">
+  <button id="prevBtn" class="text-gray-700 text-2xl hover:text-gray-900 focus:outline-none disabled:opacity-50" disabled>
+    <i class="fa fa-backward"></i>
+  </button>
+  <button id="playBtn" class="text-white bg-blue-600 hover:bg-blue-700 p-4 rounded-full text-2xl focus:outline-none disabled:opacity-50" disabled>
+    <i class="fa fa-play"></i>
+  </button>
+  <button id="nextBtn" class="text-gray-700 text-2xl hover:text-gray-900 focus:outline-none disabled:opacity-50" disabled>
+    <i class="fa fa-forward"></i>
+  </button>
+</div>
+
+<!-- Seek Bar -->
+<div class="mb-4">
+  <input id="seekBar" type="range" min="0" max="100" value="0" class="w-full accent-blue-600 h-1 rounded-lg" disabled>
+</div>
+
+<!-- Time Indicators -->
+<div class="flex justify-between text-sm text-gray-700 mb-4">
+  <span id="currentTime">00:00</span>
+  <span id="duration">00:00</span>
+</div>
+
+<!-- Playlist -->
+<ul id="playlist" class="space-y-2 max-h-48 overflow-y-auto border-t pt-2 text-gray-700">
+  <!-- Tracks injected here -->
+</ul>
+
+  </div>  <!-- Audio Element --><audio id="audio"></audio>
+
+  <!-- Player Logic -->  <script>
+    let tracks = [];
+    let currentIndex = 0;
+
+    // Element refs
+    const dirPicker = document.getElementById('dirPicker');
+    const audio = document.getElementById('audio');
+    const playBtn = document.getElementById('playBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const playlistEl = document.getElementById('playlist');
+    const seekBar = document.getElementById('seekBar');
+    const currentTimeEl = document.getElementById('currentTime');
+    const durationEl = document.getElementById('duration');
+    const trackTitleEl = document.getElementById('track-title');
+
+    // Handle folder selection
+    dirPicker.addEventListener('change', () => {
+      const files = Array.from(dirPicker.files).filter(f => f.type.startsWith('audio/'));
+      if (!files.length) return;
+
+      tracks = files.map(f => ({ title: f.name, url: URL.createObjectURL(f) }));
+      playlistEl.innerHTML = '';
+      tracks.forEach((t, i) => {
+        const li = document.createElement('li');
+        li.textContent = t.title;
+        li.className = 'cursor-pointer hover:text-purple-600 select-none';
+        li.addEventListener('click', () => loadTrack(i));
+        playlistEl.appendChild(li);
+      });
+
+      enableControls();
+      loadTrack(0);
+    });
+
+    function enableControls() {
+      [playBtn, prevBtn, nextBtn, seekBar].forEach(el => el.disabled = false);
+    }
+
+    function loadTrack(index) {
+      currentIndex = index;
+      // Reset UI
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      seekBar.value = 0;
+      currentTimeEl.textContent = '00:00';
+      durationEl.textContent = '00:00';
+      playBtn.innerHTML = '<i class="fa fa-play"></i>';
+
+      // Set new source and play when ready
+      audio.src = tracks[index].url;
+      trackTitleEl.textContent = tracks[index].title;
+      highlightActive();
+
+      const playOnLoad = () => {
+        audio.play().then(() => {
+          playBtn.innerHTML = '<i class="fa fa-pause"></i>';
+        }).catch(err => console.error('Playback error:', err));
+        audio.removeEventListener('loadedmetadata', playOnLoad);
+      };
+      audio.addEventListener('loadedmetadata', () => {
+        durationEl.textContent = formatTime(audio.duration);
+      });
+      audio.addEventListener('loadedmetadata', playOnLoad);
+      audio.load();
+    }
+
+    function highlightActive() {
+      [...playlistEl.children].forEach((li, i) => {
+        li.classList.toggle('font-semibold text-purple-600', i === currentIndex);
+      });
+    }
+
+    playBtn.addEventListener('click', () => {
+      if (audio.paused) {
+        audio.play().then(() => playBtn.innerHTML = '<i class="fa fa-pause"></i>');
+      } else {
+        audio.pause();
+        playBtn.innerHTML = '<i class="fa fa-play"></i>';
+      }
+    });
+
+    prevBtn.addEventListener('click', () => loadTrack((currentIndex - 1 + tracks.length) % tracks.length));
+    nextBtn.addEventListener('click', () => loadTrack((currentIndex + 1) % tracks.length));
+
+    audio.addEventListener('timeupdate', () => {
+      if (audio.duration) {
+        const pct = (audio.currentTime / audio.duration) * 100;
+        seekBar.value = pct;
+        currentTimeEl.textContent = formatTime(audio.currentTime);
+      }
+    });
+
+    seekBar.addEventListener('input', () => {
+      if (audio.duration) audio.currentTime = (seekBar.value / 100) * audio.duration;
+    });
+
+    audio.addEventListener('ended', () => nextBtn.click());
+
+    function formatTime(s) {
+      const m = String(Math.floor(s/60)).padStart(2,'0');
+      const sec = String(Math.floor(s%60)).padStart(2,'0');
+      return `${m}:${sec}`;
+    }
+  </script></body>
+</html>
